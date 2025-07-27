@@ -10,6 +10,7 @@
 #include "UserRoutes.hpp"
 #include <iomanip>
 #include <sstream>
+#include "ChromaClient.hpp"
 
 using json = nlohmann::json;
 
@@ -128,6 +129,95 @@ int main() {
         UserRoutes userRoutes;
         return userRoutes.logout(req);
     });
+
+    /* ------------------- ChromaDB Routes ----------------------*/
+    ChromaClient chromaClient("http", "chromadb", "8000");
+
+    // Endpoint to get ChromaDB version
+    CROW_ROUTE(app, "/api/chroma/version").methods("GET"_method)([&chromaClient](const crow::request&) {
+        return crow::response(200, chromaClient.get_version());
+    });
+
+    // Endpoint to get ChromaDB heartbeat
+    CROW_ROUTE(app, "/api/chroma/heartbeat").methods("GET"_method)([&chromaClient](const crow::request&) {
+        return crow::response(200, chromaClient.get_heartbeat());
+    });
+
+    // Endpoint to create a collection
+    CROW_ROUTE(app, "/api/collections/<string>").methods("POST"_method)([&chromaClient](const crow::request&, const std::string& name) {
+        try {
+            chromadb::Collection collection = chromaClient.create_collection(name);
+            json response = {{"collection_id", collection.GetId()}};
+            return crow::response(201, response.dump());
+        } catch (const std::exception& e) {
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
+    // Endpoint to delete a collection
+    CROW_ROUTE(app, "/api/collections/<string>").methods("DELETE"_method)([&chromaClient](const crow::request&, const std::string& name) {
+        try {
+            chromadb::Collection collection = chromaClient.create_collection(name); // Create a temporary collection object
+            bool success = chromaClient.delete_collection(collection);
+            json response = {{"collection_name", name}, {"status", success ? "deleted" : "failed"}};
+            return crow::response(200, response.dump());
+        } catch (const std::exception& e) {
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
+    // Endpoint to add embeddings to a collection
+    CROW_ROUTE(app, "/api/collections/<string>/embeddings").methods("POST"_method)([&chromaClient](const crow::request& req, const std::string& name) {
+        try {
+            auto body = json::parse(req.body);
+            std::vector<std::string> ids = body["ids"].get<std::vector<std::string>>();
+            std::vector<std::vector<double>> embeddings = body["embeddings"].get<std::vector<std::vector<double>>>();
+            std::vector<std::unordered_map<std::string, std::string>> metadatas = body["metadatas"].get<std::vector<std::unordered_map<std::string, std::string>>>();
+
+            chromadb::Collection collection = chromaClient.create_collection(name);
+            chromaClient.add_embeddings(collection, ids, embeddings, metadatas);
+
+            return crow::response(200, "Embeddings added successfully");
+        } catch (const std::exception& e) {
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
+    // Endpoint to query a collection
+    CROW_ROUTE(app, "/api/collections/<string>/query").methods("POST"_method)([&chromaClient](const crow::request& req, const std::string& name) {
+        try {
+            auto body = json::parse(req.body);
+            std::vector<std::string> ids = body["ids"].get<std::vector<std::string>>();
+            std::vector<std::vector<double>> embeddings = body["embeddings"].get<std::vector<std::vector<double>>>();
+            int limit = body["limit"].get<int>();
+
+            chromadb::Collection collection = chromaClient.create_collection(name);
+            auto queryResponse = chromaClient.query(collection, ids, embeddings, limit);
+
+            json response = json::array();
+            for (const auto& resource : queryResponse) {
+                json metadatas_json = json::array();
+                if (resource.metadatas) {
+                    for (const auto& metadata : *resource.metadatas) {
+                        metadatas_json.push_back(metadata);
+                    }
+                }
+
+                json resourceJson = {
+                    {"ids", resource.ids},
+                    {"metadatas", metadatas_json}
+                };
+                response.push_back(resourceJson);
+            }
+
+            return crow::response(200, response.dump());
+        } catch (const std::exception& e) {
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
+
+    /* ------------------- Other Routes ----------------------*/
 
     CROW_ROUTE(app, "/api/preprocessing")([](const crow::request& req) {
         return crow::response(200, "Preprocessing route");
