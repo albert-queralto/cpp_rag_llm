@@ -23,4 +23,15 @@ find_package(Boost REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 target_link_libraries(
-    llm_backend PRIVATE CURL::libcurl Boost::boost OpenSSL::SSL OpenSSL::Crypto pthread sqlite3 pqxx pq ssl crypto)
+    llm_backend 
+    PRIVATE CURL::libcurl 
+    Boost::boost 
+    OpenSSL::SSL 
+    OpenSSL::Crypto 
+    pthread 
+    sqlite3 
+    pqxx 
+    pq 
+    ssl 
+    PRIVATE chromadb
+    crypto)
