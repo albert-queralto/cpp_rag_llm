@@ -9,6 +9,10 @@ then
     chmod 664 '/root/home/data/database.db'
 fi
 
+# Ensure the shared library path is set correctly
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
+
 # Build the C++ backend application if the executable doesn't exist
 # if ! [ -f '/root/home/backend/build/llm_backend' ] ;
 # then
