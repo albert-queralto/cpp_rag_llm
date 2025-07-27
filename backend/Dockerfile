@@ -55,6 +55,14 @@ RUN mkdir -p /usr/local/include/picojson && \
 # Download and install crow_all.h
 RUN wget https://github.com/CrowCpp/Crow/releases/download/v1.2.1.2/crow_all.h -O /usr/local/include/crow_all.h
 
+# Install chromadb-cpp library
+RUN git clone --recurse-submodules https://github.com/BlackyDrum/chromadb-cpp.git /tmp/chromadb-cpp && \
+    cd /tmp/chromadb-cpp && \
+    cmake -Bbuild -S. && \
+    cmake --build build && \
+    cmake --install build && \
+    rm -rf /tmp/chromadb-cpp
+
 WORKDIR /root/home/backend
 
 # Copy the backend directory, including CMakeLists.txt
