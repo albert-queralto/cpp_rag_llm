@@ -1,0 +1,131 @@
+name: llm_project
+services:
+
+  # ollama:
+  #   build:
+  #     context: .
+  #     dockerfile: ./Dockerfile.ollama
+  #   container_name: ollama
+  #   restart: unless-stopped
+  #   image: ollama
+  #   # runtime: nvidia
+  #   # entrypoint: bash -c "/tmp/run_ollama.sh"
+  #   # environment:
+  #   #   - NVIDIA_VISIBLE_DEVICES=all
+  #   volumes:
+  #     - "./ollamadata:/root/.ollama"
+  #   # ports:
+  #     # - 11434:11434
+  #   # deploy:
+  #   #   resources:
+  #   #     reservations:
+  #   #       devices:
+  #   #         - driver: nvidia
+  #   #           count: all
+  #   #           capabilities: [gpu]
+  #   healthcheck:
+  #     test: ollama list || exit 1
+  #     interval: 10s
+  #     timeout: 30s
+  #     retries: 5
+  #     start_period: 10s
+  #   networks:
+  #     - llm_network
+
+  # ollama-models-pull:
+  #   container_name: ollama-models-pull
+  #   image: curlimages/curl:latest
+  #   # command: >
+  #   #   http://ollama:11434/api/pull -d '{"name":"mistral-nemo"}'
+  #   command: >  
+  #     sh -c "curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"llama3.1\"}'
+  #     && curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"llama3.1:70b\"}'  
+  #     && curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"mistral-nemo\"}' 
+  #     && curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"command-r\"}'
+  #     && curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"command-r-plus\"}'
+  #     && curl -X POST http://ollama:11434/api/pull -d '{\"name\":\"mistral-large\"}'"
+  #   depends_on:
+  #     ollama:
+  #       condition: service_healthy
+  #   networks:
+  #     - llm_network
+
+  backend:
+    container_name: backend
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    ports:
+      - 4000:4000
+    env_file: '.env'
+    stdin_open: true
+    tty: true
+    command: ["/root/home/backend/scripts/init_config.sh"]
+    entrypoint: /bin/bash
+    volumes:
+      - ${LOCAL_PATH}/backend:${CONTAINER_PATH}/backend
+      - ${LOCAL_PATH}/data:${CONTAINER_PATH}/data
+    # depends_on:
+    #   ollama:
+    #     condition: service_healthy
+    networks:
+      - llm_network
+
+  frontend:
+    container_name: frontend
+    build:
+      context: ./frontend
+      dockerfile: ./Dockerfile
+    ports:
+      - "3000:3000"
+    env_file: '.env'
+    environment:
+      - NODE_ENV=development
+    command: npm start
+    volumes:
+      - ${LOCAL_PATH}/frontend:${CONTAINER_PATH}/frontend
+      - ${LOCAL_PATH}/node_modules:/app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - llm_network
+
+  reverse-proxy:
+    image: nginx:latest
+    container_name: reverse-proxy
+    env_file: '.env'
+    ports:
+      - 443:443
+      - 80:80
+    volumes:
+      - ./data/nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - llm_network
+
+  chromadb:
+    image: ghcr.io/chroma-core/chroma:latest
+    container_name: chromadb
+    env_file: '.env'
+    environment:
+      - CHROMA_SERVER_NOFILE=1048576
+      - IS_PERSISTENT=TRUE
+    ports:
+      - 8000:8000
+    volumes:
+      - ./data/chroma_data/:/chroma/chroma
+    restart: always
+    healthcheck:
+      test: curl http://localhost:8000/api/v1/heartbeat || exit 1
+      interval: 30s
+      timeout: 30s
+      retries: 2
+      start_period: 5s
+    networks:
+      - llm_network
+
+networks:
+  llm_network:
+    driver: bridge
