@@ -143,6 +143,24 @@ int main() {
         return crow::response(200, chromaClient.get_heartbeat());
     });
 
+    // Endpoint to get all collections
+    CROW_ROUTE(app, "/api/collections").methods("GET"_method)([&chromaClient](const crow::request&) {
+        try {
+            auto collections = chromaClient.get_collections();
+            json response = json::array();
+            for (const auto& collection : collections) {
+                response.push_back({
+                    {"name", collection.GetName()},
+                    {"id", collection.GetId()}
+                });
+            }
+            return crow::response(200, response.dump());
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Failed to fetch collections: " << e.what() << std::endl;
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
     // Endpoint to create a collection
     CROW_ROUTE(app, "/api/collections/<string>").methods("POST"_method)([&chromaClient](const crow::request&, const std::string& name) {
         try {
@@ -154,14 +172,58 @@ int main() {
         }
     });
 
+    // Endpoint to update a collection
+    CROW_ROUTE(app, "/api/collections/<string>").methods("PUT"_method)([&chromaClient](const crow::request& req, const std::string& name) {
+        try {
+            // Parse the request body
+            auto body = json::parse(req.body);
+
+            // Validate the "name" field
+            if (!body.contains("name") || !body["name"].is_string()) {
+                throw std::invalid_argument("Invalid or missing 'name' field in request payload");
+            }
+
+            std::string newName = body["name"].get<std::string>();
+
+            // Fetch the collection by name
+            chromadb::Collection collection = chromaClient.get_collection(name);
+
+            // Update the collection name with an empty metadata map
+            std::unordered_map<std::string, std::string> emptyMetadata;
+            chromadb::Collection updatedCollection = chromaClient.update_collection(name, newName, emptyMetadata);
+
+            // Prepare the response
+            json response = {{"collection_name", updatedCollection.GetName()}};
+            return crow::response(200, response.dump());
+        } catch (const chromadb::ChromaNotFoundException& e) {
+            std::cerr << "[ERROR] Collection not found: " << e.what() << std::endl;
+            return crow::response(404, std::string("Error: Collection not found"));
+        } catch (const std::invalid_argument& e) {
+            std::cerr << "[ERROR] Invalid request payload: " << e.what() << std::endl;
+            return crow::response(400, std::string("Error: ") + e.what());
+        } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Failed to update collection: " << e.what() << std::endl;
+            return crow::response(500, std::string("Error: ") + e.what());
+        }
+    });
+
     // Endpoint to delete a collection
     CROW_ROUTE(app, "/api/collections/<string>").methods("DELETE"_method)([&chromaClient](const crow::request&, const std::string& name) {
         try {
-            chromadb::Collection collection = chromaClient.create_collection(name); // Create a temporary collection object
+            // Fetch the collection by name
+            chromadb::Collection collection = chromaClient.get_collection(name);
+
+            // Delete the collection
             bool success = chromaClient.delete_collection(collection);
+
+            // Prepare the response
             json response = {{"collection_name", name}, {"status", success ? "deleted" : "failed"}};
             return crow::response(200, response.dump());
+        } catch (const chromadb::ChromaNotFoundException& e) {
+            std::cerr << "[ERROR] Collection not found: " << e.what() << std::endl;
+            return crow::response(404, std::string("Error: Collection not found"));
         } catch (const std::exception& e) {
+            std::cerr << "[ERROR] Failed to delete collection: " << e.what() << std::endl;
             return crow::response(500, std::string("Error: ") + e.what());
         }
     });

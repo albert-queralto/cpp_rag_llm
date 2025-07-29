@@ -16,16 +16,26 @@ public:
 
     std::string get_version();
     std::string get_heartbeat();
+    std::vector<chromadb::Collection> get_collections();
+    chromadb::Collection get_collection(const std::string& name);
     chromadb::Collection create_collection(const std::string& name);
+    chromadb::Collection update_collection(
+        const std::string& oldName, 
+        const std::string& newName, 
+        const std::unordered_map<std::string, std::string>& newMetadata = {}
+    );
     bool delete_collection(chromadb::Collection& collection);
-    void add_embeddings(const chromadb::Collection& collection, 
-                        const std::vector<std::string>& ids, 
-                        const std::vector<std::vector<double>>& embeddings, 
-                        const std::vector<std::unordered_map<std::string, std::string>>& metadatas);
-    std::vector<chromadb::QueryResponseResource> query(const chromadb::Collection& collection, 
-                                                        const std::vector<std::string>& ids, 
-                                                        const std::vector<std::vector<double>>& embeddings, 
-                                                        int limit);
+    void add_embeddings(
+        const chromadb::Collection& collection, 
+        const std::vector<std::string>& ids, 
+        const std::vector<std::vector<double>>& embeddings, 
+        const std::vector<std::unordered_map<std::string, std::string>>& metadatas);
+    std::vector<chromadb::QueryResponseResource> query(
+        const chromadb::Collection& collection, 
+        const std::vector<std::string>& ids, 
+        const std::vector<std::vector<double>>& embeddings, 
+        int limit
+    );
 };
 
 #endif // CHROMA_CLIENT_HPP
