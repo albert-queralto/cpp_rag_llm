@@ -11,6 +11,11 @@
 #include <iomanip>
 #include <sstream>
 #include "ChromaClient.hpp"
+#include <filesystem>
+#include <vector>
+#include <set>
+#include "DocumentChain.hpp"
+
 
 using json = nlohmann::json;
 
@@ -86,6 +91,15 @@ void ensure_admin_user() {
     } catch (const std::exception& e) {
         std::cerr << "[ERROR] " << e.what() << std::endl;
     }
+}
+
+// Utility function to save uploaded file
+bool save_uploaded_file(const std::string& dir, const std::string& filename, const std::string& file_content) {
+    std::filesystem::create_directories(dir);
+    std::ofstream ofs(dir + "/" + filename, std::ios::binary);
+    if (!ofs) return false;
+    ofs.write(file_content.data(), file_content.size());
+    return ofs.good();
 }
 
 int main() {
@@ -278,19 +292,65 @@ int main() {
         }
     });
 
+    /* ------------------- Adding and Preprocessing documents ----------------------*/
+    CROW_ROUTE(app, "/api/upload/<string>").methods("POST"_method)
+    ([](const crow::request& req, const std::string& collection_name) {
+        // Expecting: header "X-Filename" with the filename, and the file content in req.body
+        auto filename_it = req.headers.find("X-Filename");
+        if (filename_it == req.headers.end()) {
+            return crow::response(400, "Missing X-Filename header");
+        }
+        std::string filename = filename_it->second;
+        std::string dir_path = "data/files/" + collection_name;
+        if (!save_uploaded_file(dir_path, filename, req.body)) {
+            return crow::response(500, "Failed to save file");
+        }
+
+        // Call document chain logic
+        std::string file_path = dir_path + "/" + filename;
+        std::string result = process_document_chain(file_path, collection_name);
+
+        nlohmann::json resp = {{"message", result}};
+        return crow::response(200, resp.dump());
+    });
+
+    CROW_ROUTE(app, "/api/get_document_filenames/<string>")
+    ([](const crow::request& req, const std::string& collection_name) {
+        try {
+            ChromaClient chromaClient("http", "chromadb", "8000");
+            auto collection = chromaClient.get_collection(collection_name);
+
+            // Prepare include vector to get metadatas
+            std::vector<std::string> ids; // empty means all
+            std::vector<std::string> include = {"metadatas"};
+            nlohmann::json where_document;
+            nlohmann::json where;
+
+            // Get all embeddings/resources
+            auto resources = chromaClient.get_embeddings(collection, ids, include, where_document, where);
+
+            std::vector<std::string> filenames;
+            for (const auto& resource : resources) {
+                if (resource.metadata && resource.metadata->count("source")) {
+                    std::string source = resource.metadata->at("source");
+                    auto pos = source.find_last_of("/\\");
+                    filenames.push_back(pos != std::string::npos ? source.substr(pos + 1) : source);
+                }
+            }
+
+            nlohmann::json resp = {{"filenames", filenames}};
+            return crow::response(200, resp.dump());
+        } catch (const std::exception& e) {
+            return crow::response(404, "Collection or documents not found.");
+        }
+    });
+
+
 
     /* ------------------- Other Routes ----------------------*/
 
-    CROW_ROUTE(app, "/api/preprocessing")([](const crow::request& req) {
-        return crow::response(200, "Preprocessing route");
-    });
-
     CROW_ROUTE(app, "/api/inference")([](const crow::request& req) {
         return crow::response(200, "Inference route");
-    });
-
-    CROW_ROUTE(app, "/api/doc_collections")([](const crow::request& req) {
-        return crow::response(200, "Doc collections route");
     });
 
     // Start the server

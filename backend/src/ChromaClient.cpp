@@ -87,6 +87,16 @@ bool ChromaClient::delete_collection(chromadb::Collection& collection) {
     }
 }
 
+std::vector<chromadb::EmbeddingResource> ChromaClient::get_embeddings(
+    const chromadb::Collection& collection,
+    const std::vector<std::string>& ids,
+    const std::vector<std::string>& include,
+    const nlohmann::json& where_document,
+    const nlohmann::json& where
+) {
+    return client.GetEmbeddings(collection, ids, include, where_document, where);
+}
+
 void ChromaClient::add_embeddings(
     const chromadb::Collection& collection, 
     const std::vector<std::string>& ids, 

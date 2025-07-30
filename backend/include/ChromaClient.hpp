@@ -25,6 +25,13 @@ public:
         const std::unordered_map<std::string, std::string>& newMetadata = {}
     );
     bool delete_collection(chromadb::Collection& collection);
+    std::vector<chromadb::EmbeddingResource> get_embeddings(
+        const chromadb::Collection& collection,
+        const std::vector<std::string>& ids,
+        const std::vector<std::string>& include,
+        const nlohmann::json& where_document,
+        const nlohmann::json& where
+    );
     void add_embeddings(
         const chromadb::Collection& collection, 
         const std::vector<std::string>& ids, 
